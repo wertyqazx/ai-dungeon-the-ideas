@@ -28,7 +28,7 @@ Enter commands in **Story** mode. Each command uses one model generation.
 
 | Command | Result |
 | --- | --- |
-| `:ideas` | Five mixed options for the next beat by default |
+| `:ideas` | Three mixed options for the next beat by default |
 | `:ideas say` | Dialogue the player can say |
 | `:ideas do` | Actions the player can take |
 | `:ideas story` | Optional developments the player can introduce |
@@ -47,7 +47,7 @@ The suggestions appear as an out-of-character menu. Enter a new action in your o
 - Ideas emphasizes recent actions. Plans uses the model's available context, including Plot Essentials, Story Summary, and retrieved memories when AI Dungeon includes them. On long adventures, update Story Summary with older plot threads you want Plans to consider.
 - Menus appear in the adventure transcript. Ideas strips them from subsequent model context and from the history used by the bundled scripts. AI Dungeon's own transcript, action count, and automatic summarization still operate independently.
 - The combined builds bypass World Calendar, Auto-Cards, and Inner Self for Ideas commands. A pending World Calendar confirmation remains available through `:yes` or `:no`. If a calendar card already exists, Ideas reads its current snapshot for date, location, weather, and active events.
-- The model may return fewer options than requested if the response is too short or some lines fail format checks. Increase the AI response length for larger menus or longer plans.
+- Each option needs a `SAY`, `DO`, `STORY`, or `PLAN` tag for the requested mode. Tags are case-insensitive and support formats such as `DO |`, `DO –`, `DO:`, and `[DO]`. The model may return fewer options than requested if its answer is cut short. Increase the AI response length if longer menus are repeatedly cut off.
 
 ## Development
 

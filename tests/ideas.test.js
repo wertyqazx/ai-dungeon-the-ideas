@@ -77,11 +77,12 @@ function createRuntime(variant) {
 const story = "Mira stands beside the locked sluice gate. You have the brass key.";
 const suggestions = [
   '1. **SAY** | "What does the lock protect, Mira?"',
-  "DO | Try the brass key in the gate.",
-  "STORY | Let Mira offer a second way across.",
-  "DO | Try the brass key in the gate!",
   "PLAN | This is for a different command.",
-  "The gate swings open."
+  "DO | Try the brass key in the gate.",
+  "DO | Try the brass key in the gate!",
+  "The gate swings open.",
+  "STORY | Let Mira offer a second way across.",
+  "DO | Inspect the hinge."
 ].join("\n");
 
 test("standalone leaves ordinary actions intact, including multiline text", () => {
@@ -99,7 +100,7 @@ test("mixed scene suggestions are grounded, formatted, deduplicated and removed 
   const result = game.submit(":ideas", suggestions);
   assert.match(result.action.text, /^[\u200B\u200C\u2063]+$/);
   assert.ok(result.context.text.includes(story));
-  assert.match(result.context.text, /Write 5 options/);
+  assert.match(result.context.text, /Write 3 options/);
   assert.doesNotMatch(result.context.text, /[\u200B\u200C\u2063]/);
   assert.match(result.output.text, /1\. Say — .*Mira\?/);
   assert.match(result.output.text, /2\. Do — Try the brass key/);
@@ -141,6 +142,34 @@ test("plans retain earlier threads and the scene within the model budget", () =>
   assert.match(plan.output.text, /Direction — Investigate/);
 });
 
+test("accepts variations of the required tags and rejects untagged or wrong-category lines", () => {
+  const game = createRuntime("ideas");
+  game.history.push({ type: "start", text: "Мира ждёт у шлюза." });
+  const tagged = game.submit(":ideas do 5", [
+    "1. do | Осмотреть замок.",
+    "2. DO – Проверить ключ.",
+    "3. Спрятать ключ.",
+    "4. DO: Постучать в ворота.",
+    "5. **[DO]** Проверить петли.",
+    "6. SAY | «Мира, где ключ?»",
+    "7. **DO：** Найти обход."
+  ].join("\n"));
+  assert.match(tagged.output.text, /1\. Действие — Осмотреть замок\./);
+  assert.match(tagged.output.text, /2\. Действие — Проверить ключ\./);
+  assert.match(tagged.output.text, /3\. Действие — Постучать в ворота\./);
+  assert.match(tagged.output.text, /4\. Действие — Проверить петли\./);
+  assert.match(tagged.output.text, /5\. Действие — Найти обход\./);
+  assert.doesNotMatch(tagged.output.text, /Спрятать ключ|Мира, где ключ/);
+
+  const untagged = game.submit(":ideas", "1. Спросить Миру о ключе.\n2. Проверить замок.");
+  assert.match(untagged.output.text, /не удалось распознать меню/);
+  assert.doesNotMatch(untagged.output.text, /Спросить Миру|Проверить замок/);
+
+  const wrongType = game.submit(":ideas say", "1. **[DO]** Use the key.\n2. DO | Force the gate.");
+  assert.match(wrongType.output.text, /не удалось распознать меню/);
+  assert.doesNotMatch(wrongType.output.text, /Use the key|Force the gate/);
+});
+
 test("Retry can regenerate Ideas, while Continue resumes the story", () => {
   const game = createRuntime("ideas");
   game.history.push({ type: "start", text: story });
@@ -173,12 +202,12 @@ test("a new Story action takes priority if the last visible input is an Ideas ma
 test("recover from missing Context hook, malformed model output and a clipped prior menu", () => {
   const game = createRuntime("ideas");
   game.history.push({ type: "start", text: story });
-  const skipped = game.submit(":ideas", "The gate swings open.", { skipContext: true });
+  const skipped = game.submit(":ideas", "DO | Try the key.", { skipContext: true });
   assert.match(skipped.output.text, /Turn off Optimized Context/);
-  assert.doesNotMatch(skipped.output.text, /gate swings open/);
+  assert.doesNotMatch(skipped.output.text, /Try the key/);
 
   const malformed = game.submit(":ideas", "The gate swings open.");
-  assert.match(malformed.output.text, /no usable options/);
+  assert.match(malformed.output.text, /did not return a recognizable menu/);
   const context = game.hook("context", "Story Summary:\nMap.\nRecent Story:\n2. Do — A clipped idea\n<<< Ideas\nMira waits.");
   assert.doesNotMatch(context.text, /clipped idea/);
   assert.match(context.text, /Story Summary:\nMap\./);
@@ -198,6 +227,7 @@ for (const variant of variants.slice(1)) {
     assert.ok(oldState.WorldCalendar.inputTurnSerial > 0);
 
     const ideas = game.submit(":ideas", suggestions);
+    assert.match(ideas.context.text, /Write 3 options/);
     assert.match(ideas.context.text, /World Calendar snapshot:\nDate: 1 January 2000 AD/);
     assert.match(ideas.output.text, /Say — .*Mira\?/);
     const { Ideas, ...otherState } = game.state;

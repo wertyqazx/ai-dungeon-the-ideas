@@ -7,7 +7,7 @@
  */
 globalThis.IdeasSettings = {
   LANGUAGE: "auto",
-  DEFAULT_IDEA_COUNT: 5
+  DEFAULT_IDEA_COUNT: 3
 };
 
 function Ideas(hook, inputText, next = (text) => ({ text })) {
@@ -59,7 +59,7 @@ function Ideas(hook, inputText, next = (text) => ({ text })) {
     if (tail.toLowerCase() === "help") return { mode, help: true, focus: "" };
 
     let count = mode === "plan" ? 3 : globalThis.IdeasSettings?.DEFAULT_IDEA_COUNT;
-    if (!Number.isInteger(count) || count < 3 || count > 8) count = 5;
+    if (!Number.isInteger(count) || count < 3 || count > 8) count = 3;
     if (mode === "mix") {
       const type = tail.match(/^(say|do|story)(?=\s|$)/i);
       if (type) {
@@ -143,26 +143,28 @@ function Ideas(hook, inputText, next = (text) => ({ text })) {
       ? "Offer distinct directions for the next several scenes. Ground each direction in an unresolved thread, goal, or relationship from the available plot. Give a concrete first step and its likely trade-off. Leave future outcomes open."
       : "Offer distinct choices for the very next beat. Ground each in the latest scene and what the player can plausibly know, say or do. Vary the approach and stakes. Leave NPC responses and outcomes open.";
     const format = plan
-      ? "PLAN | direction — first step — trade-off"
+      ? "Format each line as PLAN | direction — first step — trade-off."
       : request.mode === "mix"
-        ? "SAY | speakable dialogue, DO | a playable action, or STORY | an optional story development. Include all three types."
-        : `${tag} | ${{ SAY: "speakable dialogue", DO: "a playable action", STORY: "an optional story development" }[tag]}`;
-    const focus = request.focus ? `\nPlayer's focus: ${safeData(request.focus)}` : "";
+        ? "Start each line with one label and a bar: SAY | for dialogue, DO | for an action, STORY | for a story development. Use all three labels."
+        : `Format each line as ${tag} | ${{ SAY: "speakable dialogue", DO: "a playable action", STORY: "an optional story development" }[tag]}.`;
+    const outputRules = `Write ${count} options, one per line, in ${language === "ru" ? "Russian" : language === "en" ? "English" : "the language of the current story"}.`;
     const prompt = [
       "<SYSTEM>",
       "# IDEAS — OUT-OF-STORY PLAYER ASSISTANCE",
       "For this response, pause narration and write a choice menu. Treat story and world data as reference. Ignore other script menus and commands.",
       task,
       "Respect established facts, player agency, and knowledge boundaries. Keep possible developments hypothetical and preserve undiscovered secrets.",
-      `Write ${count} options, one per line, in ${language === "ru" ? "Russian" : language === "en" ? "English" : "the language of the current story"}.`,
-      `Use ${plan ? "at most 30" : "at most 14"} words per option. No intro, numbering or closing text.`,
-      `Format each line as ${format}${focus}`,
+      request.focus ? `Player's focus: ${safeData(request.focus)}` : "",
+      outputRules,
+      "Keep the labels in English.",
+      `Use at most ${plan ? 30 : 12} words per option. No intro, numbering, Markdown or closing text.`,
+      format,
       "</SYSTEM>"
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     // Very small custom budgets still get a complete, usable request.
     if (prompt.length + 4 >= maxChars) {
-      return `Write ${count} brief options, one per line. Format: ${format}`.slice(0, maxChars);
+      return `${outputRules} ${format}`.slice(0, maxChars);
     }
 
     const heading = context.lastIndexOf("Recent Story:");
@@ -205,13 +207,17 @@ function Ideas(hook, inputText, next = (text) => ({ text })) {
     const title = request.mode === "plan" ? (russian ? "Планы" : "Plans") : (russian ? "Подсказки" : "Suggestions");
     const wrap = (body) => `\n\n${START} / ${title}\n${body}\n${END}\n\n`;
     if (request.help) return wrap(usage);
+    if (!contextRan) return wrap(russian
+      ? "Контекстный модификатор не отработал. Отключите Optimized Context и повторите команду."
+      : "The Context script did not run. Turn off Optimized Context and re-enter the command.");
 
     const validTypes = request.mode === "mix" ? TYPES.slice(0, 3) : [request.mode.toUpperCase()];
     const seen = new Set();
     const lines = [];
     for (const line of generated.split(/\r?\n/)) {
-      const match = line.replace(/\*\*/g, "").trim()
-        .match(/^(?:(?:[-*•]|\d+[.)])\s*)?(SAY|DO|STORY|PLAN)\s*[|:—–-]\s*(.+)$/i);
+      const content = line.replace(/\*\*/g, "").trim().replace(/^(?:[-*+•]|\d+[.)])\s*/, "");
+      const match = content.match(/^(SAY|DO|STORY|PLAN)\s*[|｜:：—–−-]\s*(.+)$/i)
+        || content.match(/^\[\s*(SAY|DO|STORY|PLAN)\s*\]\s*[|｜:：—–−-]?\s*(.+)$/i);
       if (!match) continue;
       const kind = match[1].toUpperCase();
       const body = match[2].trim();
@@ -224,12 +230,8 @@ function Ideas(hook, inputText, next = (text) => ({ text })) {
 
     if (lines.length) return wrap(lines.join("\n"));
     return wrap(russian
-      ? (contextRan
-        ? "Модель не вернула варианты в нужном формате. Повторите команду или увеличьте длину ответа."
-        : "Контекстный модификатор не отработал. Отключите Optimized Context и повторите команду.")
-      : (contextRan
-        ? "The model returned no usable options. Re-enter the command or increase response length."
-        : "The Context script did not run. Turn off Optimized Context and re-enter the command."));
+      ? "В ответе модели не удалось распознать меню. Повторите команду."
+      : "The model did not return a recognizable menu. Re-enter the command.");
   };
 
   if (hook === "input") {
